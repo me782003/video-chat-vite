@@ -1,4 +1,3 @@
-// App.jsx - دعم الفيديو الكامل أثناء المكالمة 🎥
 import { useEffect, useState, useRef } from "react";
 import io from "socket.io-client";
 import toast, { Toaster } from 'react-hot-toast';
@@ -37,13 +36,17 @@ export default function App() {
                 toast.dismiss(t.id);
                 setCurrentCallTarget(from);
                 const stream = await setupMedia();
+                console.log("🎥 الفيديو والصوت المحلي:", stream.getTracks());
                 if (!stream) return;
                 const pc = createPeerConnection(stream, from);
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                socket.emit('answer-call', { targetId: from, answer });
-                setPeerConnection(pc);
+                setTimeout(async () => {
+                  const answer = await pc.createAnswer();
+                  await pc.setLocalDescription(answer);
+                  socket.emit('answer-call', { targetId: from, answer });
+                  setPeerConnection(pc);
+                  console.log('✅ تم قبول المكالمة والرد بالـ answer');
+                }, 300);
               }}
             >قبول</button>
             <button className="px-3 py-1 bg-red-500 text-white rounded" onClick={() => toast.dismiss(t.id)}>رفض</button>
@@ -106,8 +109,10 @@ export default function App() {
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
     pc.ontrack = (event) => {
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = event.streams[0];
+      const remoteStream = event.streams[0];
+      if (remoteVideoRef.current && remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        console.log("🎥 تم استقبال فيديو من الطرف الآخر:", remoteStream.getTracks());
       }
     };
 
@@ -133,6 +138,7 @@ export default function App() {
   const handleCall = async (targetId) => {
     const stream = await setupMedia();
     if (!stream) return;
+    console.log("🎥 الفيديو المحلي:", stream.getTracks());
     setCurrentCallTarget(targetId);
     const pc = createPeerConnection(stream, targetId);
     const offer = await pc.createOffer();
