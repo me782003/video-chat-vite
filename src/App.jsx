@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import io from "socket.io-client";
-import toast, { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from "react-hot-toast";
 
 const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:3000");
 
@@ -28,7 +28,7 @@ export default function App() {
     socket.on("incoming-call", async ({ from, offer, name }) => {
       toast((t) => (
         <div className="p-4">
-          <p className="font-semibold">📞 مكالمة واردة من {name || 'مستخدم'}</p>
+          <p className="font-semibold">📞 مكالمة واردة من {name || "مستخدم"}</p>
           <div className="mt-2 flex justify-end gap-2">
             <button
               className="px-3 py-1 bg-green-500 text-white rounded"
@@ -43,40 +43,49 @@ export default function App() {
                 setTimeout(async () => {
                   const answer = await pc.createAnswer();
                   await pc.setLocalDescription(answer);
-                  socket.emit('answer-call', { targetId: from, answer });
+                  socket.emit("answer-call", { targetId: from, answer });
                   setPeerConnection(pc);
-                  console.log('✅ تم قبول المكالمة والرد بالـ answer');
+                  console.log("✅ تم قبول المكالمة والرد بالـ answer");
                 }, 300);
               }}
-            >قبول</button>
-            <button className="px-3 py-1 bg-red-500 text-white rounded" onClick={() => toast.dismiss(t.id)}>رفض</button>
+            >
+              قبول
+            </button>
+            <button
+              className="px-3 py-1 bg-red-500 text-white rounded"
+              onClick={() => toast.dismiss(t.id)}
+            >
+              رفض
+            </button>
           </div>
         </div>
       ));
     });
 
-    socket.on('call-answered', async ({ from, answer }) => {
+    socket.on("call-answered", async ({ from, answer }) => {
       if (peerConnection) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        console.log('✅ تم الربط بالطرف الآخر!');
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(answer)
+        );
+        console.log("✅ تم الربط بالطرف الآخر!");
       }
     });
 
-    socket.on('ice-candidate', async ({ candidate }) => {
+    socket.on("ice-candidate", async ({ candidate }) => {
       try {
         await peerConnection?.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error('❌ فشل في إضافة ICE Candidate', err);
+        console.error("❌ فشل في إضافة ICE Candidate", err);
       }
     });
 
-    socket.on('end-call', () => {
-      toast('📴 تم إنهاء المكالمة من الطرف الآخر');
+    socket.on("end-call", () => {
+      toast("📴 تم إنهاء المكالمة من الطرف الآخر");
       endCall();
     });
 
-    socket.on('chat-message', ({ from, message }) => {
-      setMessages(prev => [...prev, { from, message }]);
+    socket.on("chat-message", ({ from, message }) => {
+      setMessages((prev) => [...prev, { from, message }]);
     });
 
     return () => {
@@ -92,7 +101,10 @@ export default function App() {
 
   const setupMedia = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
       setLocalStream(stream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -105,22 +117,48 @@ export default function App() {
   };
 
   const createPeerConnection = (stream, targetId) => {
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     pc.ontrack = (event) => {
       const remoteStream = event.streams[0];
-      if (remoteVideoRef.current && remoteStream) {
-        remoteVideoRef.current.srcObject = remoteStream;
-        console.log("🎥 تم استقبال فيديو من الطرف الآخر:", remoteStream.getTracks());
-      }
+      const hasVideo = remoteStream.getVideoTracks().length > 0;
+
+      console.log(
+        "🎥 Remote stream received. Video tracks:",
+        hasVideo ? "✅ موجود" : "❌ غير موجود"
+      );
+
+      setTimeout(() => {
+        if (remoteVideoRef.current && remoteStream) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.autoplay = true;
+          remoteVideoRef.current.playsInline = true;
+          remoteVideoRef.current.muted = true; // ← لتفادي مشاكل autoplay
+
+          const playPromise = remoteVideoRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => console.log("🎬 الفيديو اشتغل بنجاح"))
+              .catch((err) =>
+                console.warn("🚫 فشل تشغيل الفيديو تلقائيًا:", err)
+              );
+          }
+
+          console.log("✅ Remote stream attached to video element");
+        } else {
+          console.warn("⚠️ remoteVideoRef مش جاهز أو مفيش stream");
+        }
+      }, 300);
     };
 
     pc.onicecandidate = (event) => {
       if (event.candidate && (currentCallTarget || targetId)) {
-        socket.emit('ice-candidate', {
+        socket.emit("ice-candidate", {
           targetId: currentCallTarget || targetId,
-          candidate: event.candidate
+          candidate: event.candidate,
         });
       }
     };
@@ -130,7 +168,7 @@ export default function App() {
 
   const handleLogin = () => {
     if (userIdInput.trim()) {
-      socket.emit('register-user', userIdInput.trim());
+      socket.emit("register-user", userIdInput.trim());
       setUserId(userIdInput.trim());
     }
   };
@@ -143,13 +181,13 @@ export default function App() {
     const pc = createPeerConnection(stream, targetId);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    socket.emit('call-user', { targetId, offer });
+    socket.emit("call-user", { targetId, offer });
     setPeerConnection(pc);
   };
 
   const endCall = () => {
     peerConnection?.close();
-    localStream?.getTracks().forEach(track => track.stop());
+    localStream?.getTracks().forEach((track) => track.stop());
     setPeerConnection(null);
     setLocalStream(null);
     setCurrentCallTarget(null);
@@ -159,7 +197,7 @@ export default function App() {
 
   const handleEndCall = () => {
     if (currentCallTarget) {
-      socket.emit('end-call', { targetId: currentCallTarget });
+      socket.emit("end-call", { targetId: currentCallTarget });
     }
     endCall();
   };
@@ -176,8 +214,14 @@ export default function App() {
 
   const sendMessage = () => {
     if (chatInput.trim() && currentCallTarget) {
-      socket.emit('chat-message', { targetId: currentCallTarget, message: chatInput.trim() });
-      setMessages(prev => [...prev, { from: 'me', message: chatInput.trim() }]);
+      socket.emit("chat-message", {
+        targetId: currentCallTarget,
+        message: chatInput.trim(),
+      });
+      setMessages((prev) => [
+        ...prev,
+        { from: "me", message: chatInput.trim() },
+      ]);
       setChatInput("");
     }
   };
@@ -186,7 +230,9 @@ export default function App() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
       <Toaster position="top-right" />
       <div className="w-full max-w-md bg-white shadow-xl rounded-2xl p-4">
-        <h1 className="text-xl font-bold mb-4 text-center">🎙️📷 Voice & Video Chat</h1>
+        <h1 className="text-xl font-bold mb-4 text-center">
+          🎙️📷 Voice & Video Chat
+        </h1>
 
         {!userId ? (
           <div className="flex gap-2 mb-4">
@@ -196,28 +242,61 @@ export default function App() {
               className="flex-grow p-2 border rounded-lg"
               onChange={(e) => setUserIdInput(e.target.value)}
             />
-            <button onClick={handleLogin} className="bg-blue-500 text-white px-4 py-2 rounded-lg">دخول</button>
+            <button
+              onClick={handleLogin}
+              className="bg-blue-500 text-white px-4 py-2 rounded-lg"
+            >
+              دخول
+            </button>
           </div>
         ) : (
           <>
-            <div className="mb-4 text-center text-gray-700">أهلاً، {userId} 👋</div>
+            <div className="mb-4 text-center text-gray-700">
+              أهلاً، {userId} 👋
+            </div>
 
             {peerConnection && (
               <>
                 <div className="flex gap-2 mb-4">
-                  <button onClick={handleEndCall} className="bg-red-600 text-white px-4 py-2 rounded">📴 إنهاء</button>
-                  <button onClick={toggleMute} className="bg-gray-700 text-white px-4 py-2 rounded">
-                    {isMuted ? '🎙️ تشغيل المايك' : '🔇 كتم المايك'}
+                  <button
+                    onClick={handleEndCall}
+                    className="bg-red-600 text-white px-4 py-2 rounded"
+                  >
+                    📴 إنهاء
+                  </button>
+                  <button
+                    onClick={toggleMute}
+                    className="bg-gray-700 text-white px-4 py-2 rounded"
+                  >
+                    {isMuted ? "🎙️ تشغيل المايك" : "🔇 كتم المايك"}
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-4">
-                  <video ref={localVideoRef} className="w-full rounded" autoPlay muted playsInline></video>
-                  <video ref={remoteVideoRef} className="w-full rounded" autoPlay playsInline></video>
+                  <video
+                    ref={localVideoRef}
+                    className="w-full rounded"
+                    autoPlay
+                    muted
+                    playsInline
+                  ></video>
+                  <video
+                    ref={remoteVideoRef}
+                    className="w-full rounded bg-black"
+                    autoPlay
+                    playsInline
+                    muted
+                  />
                 </div>
                 <div className="border rounded p-2 mb-2 bg-gray-50 h-40 overflow-y-auto">
                   {messages.map((msg, idx) => (
-                    <div key={idx} className={msg.from === 'me' ? 'text-right' : 'text-left'}>
-                      <span className="text-sm text-gray-800">{msg.from === 'me' ? 'أنا' : 'الطرف الآخر'}:</span> {msg.message}
+                    <div
+                      key={idx}
+                      className={msg.from === "me" ? "text-right" : "text-left"}
+                    >
+                      <span className="text-sm text-gray-800">
+                        {msg.from === "me" ? "أنا" : "الطرف الآخر"}:
+                      </span>{" "}
+                      {msg.message}
                     </div>
                   ))}
                 </div>
@@ -226,11 +305,16 @@ export default function App() {
                     type="text"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                    onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                     placeholder="اكتب رسالة..."
                     className="flex-grow p-2 border rounded"
                   />
-                  <button onClick={sendMessage} className="bg-blue-500 text-white px-3 rounded">إرسال</button>
+                  <button
+                    onClick={sendMessage}
+                    className="bg-blue-500 text-white px-3 rounded"
+                  >
+                    إرسال
+                  </button>
                 </div>
               </>
             )}
@@ -238,12 +322,22 @@ export default function App() {
             <div className="border p-2 rounded bg-gray-50 mt-4 max-h-60 overflow-y-auto">
               <p className="font-semibold mb-2">🧑‍🤝‍🧑 المتصلين حاليًا:</p>
               {connectedUsers.length === 0 ? (
-                <p className="text-sm text-gray-500">لا يوجد مستخدمين حاليًا.</p>
+                <p className="text-sm text-gray-500">
+                  لا يوجد مستخدمين حاليًا.
+                </p>
               ) : (
                 connectedUsers.map(([id, name]) => (
-                  <div key={id} className="flex items-center justify-between mb-2">
+                  <div
+                    key={id}
+                    className="flex items-center justify-between mb-2"
+                  >
                     <span className="text-sm break-all">{name}</span>
-                    <button onClick={() => handleCall(id)} className="bg-green-500 text-white px-2 py-1 rounded text-sm">اتصل</button>
+                    <button
+                      onClick={() => handleCall(id)}
+                      className="bg-green-500 text-white px-2 py-1 rounded text-sm"
+                    >
+                      اتصل
+                    </button>
                   </div>
                 ))
               )}
