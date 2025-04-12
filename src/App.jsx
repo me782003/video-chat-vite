@@ -234,7 +234,7 @@ export default function App() {
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-4">
-                  <video ref={localVideoRef} className="w-full rounded" autoPlay muted playsInline />
+                  <video ref={localVideoRef} className="w-full rounded" autoPlay  playsInline />
                   <video ref={remoteVideoRef} className="w-full rounded bg-black" autoPlay playsInline  />
                 </div>
                 <div className="border rounded p-2 mb-2 bg-gray-50 h-40 overflow-y-auto">
