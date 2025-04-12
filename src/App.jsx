@@ -1,4 +1,3 @@
-// App.jsx
 import { useEffect, useState, useRef } from "react";
 import io from "socket.io-client";
 import toast, { Toaster } from 'react-hot-toast';
@@ -39,19 +38,12 @@ export default function App() {
                 const stream = await setupMedia();
                 if (!stream) return;
 
-                console.log("🎥 الفيديو المحلي (مستقبِل):", stream.getTracks());
                 const pc = createPeerConnection(stream, from);
-
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                console.log("✅ تم استقبال offer وتهيئة الـ PeerConnection");
-
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-
                 socket.emit('answer-call', { targetId: from, answer });
                 setPeerConnection(pc);
-
-                console.log("✅ تم إرسال answer وربط peerConnection");
               }}
             >قبول</button>
             <button className="px-3 py-1 bg-red-500 text-white rounded" onClick={() => toast.dismiss(t.id)}>رفض</button>
@@ -61,9 +53,11 @@ export default function App() {
     });
 
     socket.on('call-answered', async ({ from, answer }) => {
-      if (peerConnection) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      try {
+        await peerConnection?.setRemoteDescription(new RTCSessionDescription(answer));
         console.log('✅ تم الربط بالطرف الآخر!');
+      } catch (err) {
+        console.error('❌ فشل في setRemoteDescription:', err);
       }
     });
 
@@ -123,7 +117,7 @@ export default function App() {
           remoteVideoRef.current.srcObject = remoteStream;
           remoteVideoRef.current.autoplay = true;
           remoteVideoRef.current.playsInline = true;
-          // remoteVideoRef.current.muted = true;
+          remoteVideoRef.current.muted = true;
 
           const playPromise = remoteVideoRef.current.play();
           if (playPromise !== undefined) {
@@ -161,7 +155,6 @@ export default function App() {
   const handleCall = async (targetId) => {
     const stream = await setupMedia();
     if (!stream) return;
-    console.log("🎥 الفيديو المحلي (متصل):", stream.getTracks());
     setCurrentCallTarget(targetId);
     const pc = createPeerConnection(stream, targetId);
     const offer = await pc.createOffer();
@@ -234,8 +227,8 @@ export default function App() {
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-4">
-                  <video ref={localVideoRef} className="w-full rounded" autoPlay  playsInline />
-                  <video ref={remoteVideoRef} className="w-full rounded bg-black" autoPlay playsInline  />
+                  <video ref={localVideoRef} className="w-full rounded" autoPlay muted playsInline />
+                  <video ref={remoteVideoRef} className="w-full rounded bg-black" autoPlay playsInline muted />
                 </div>
                 <div className="border rounded p-2 mb-2 bg-gray-50 h-40 overflow-y-auto">
                   {messages.map((msg, idx) => (
