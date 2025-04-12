@@ -123,7 +123,7 @@ export default function App() {
           remoteVideoRef.current.srcObject = remoteStream;
           remoteVideoRef.current.autoplay = true;
           remoteVideoRef.current.playsInline = true;
-          remoteVideoRef.current.muted = true;
+          // remoteVideoRef.current.muted = true;
 
           const playPromise = remoteVideoRef.current.play();
           if (playPromise !== undefined) {
