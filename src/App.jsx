@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import io from "socket.io-client";
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -38,6 +38,14 @@ export default function App() {
 
                 const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+                pc.ontrack = (event) => {
+                  const remoteStream = event.streams[0];
+                  const audio = new Audio();
+                  audio.srcObject = remoteStream;
+                  audio.autoplay = true;
+                  audio.play().catch(err => console.error("❌ فشل تشغيل الصوت للطرف المستقبل:", err));
+                };
 
                 pc.onicecandidate = (event) => {
                   if (event.candidate) {
@@ -120,6 +128,14 @@ export default function App() {
     setCurrentCallTarget(targetId);
     const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    pc.ontrack = (event) => {
+      const remoteStream = event.streams[0];
+      const audio = new Audio();
+      audio.srcObject = remoteStream;
+      audio.autoplay = true;
+      audio.play().catch(err => console.error("❌ فشل تشغيل الصوت للطرف المتصل:", err));
+    };
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
