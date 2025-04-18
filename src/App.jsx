@@ -32,14 +32,39 @@ export default function App() {
               className="px-3 py-1 bg-green-500 text-white rounded"
               onClick={async () => {
                 toast.dismiss(t.id);
-                setCurrentCallTarget(from);
                 const stream = await setupMedia();
                 if (!stream) return;
-                const pc = createPeerConnection(stream, from);
+
+                const pc = new RTCPeerConnection({
+                  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+                });
+
+                // إعداد معالجات ICE للمستجيب
+                pc.onicecandidate = (event) => {
+                  if (event.candidate) {
+                    socket.emit("ice-candidate", {
+                      targetId: from,
+                      candidate: event.candidate,
+                    });
+                  }
+                };
+
+                // معالجة تدفق الوسائط الواردة
+                pc.ontrack = (event) => {
+                  const remoteStream = event.streams[0];
+                  if (remoteVideoRef.current) {
+                    remoteVideoRef.current.srcObject = remoteStream;
+                  }
+                };
+
+                stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
+
                 socket.emit("answer-call", { targetId: from, answer });
+                setCurrentCallTarget(from);
                 setPeerConnection(pc);
               }}
             >
@@ -113,39 +138,25 @@ export default function App() {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.autoplay = true;
-        remoteVideoRef.current.playsInline = true;
-        remoteVideoRef.current.muted = false;
-      }
-    };
-
+    // إعداد معالجات ICE للمتصل
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit("ice-candidate", {
-          targetId: currentCallTarget || targetId,
+          targetId,
           candidate: event.candidate,
         });
       }
     };
 
-    pc.onnegotiationneeded = async () => {
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit("call-user", {
-          targetId: currentCallTarget || targetId,
-          offer,
-        });
-      } catch (err) {
-        console.error("❌ renegotiation error", err);
+    // معالجة تدفق الوسائط الواردة
+    pc.ontrack = (event) => {
+      const remoteStream = event.streams[0];
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
       }
     };
+
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     return pc;
   };
@@ -165,14 +176,24 @@ export default function App() {
     const pc = createPeerConnection(stream, targetId);
     setPeerConnection(pc);
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit("call-user", { targetId, offer });
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("call-user", { targetId, offer });
+    } catch (err) {
+      console.error("❌ فشل في إنشاء العرض", err);
+    }
   };
 
   const endCall = () => {
-    peerConnection?.close();
-    localStream?.getTracks().forEach((t) => t.stop());
+    if (peerConnection) {
+      peerConnection.ontrack = null;
+      peerConnection.onicecandidate = null;
+      peerConnection.close();
+    }
+    if (localStream) {
+      localStream.getTracks().forEach((track) => track.stop());
+    }
     setPeerConnection(null);
     setLocalStream(null);
     setCurrentCallTarget(null);
@@ -214,6 +235,7 @@ export default function App() {
       <div className="w-full max-w-md bg-white shadow-xl rounded-2xl p-4">
         <h1 className="text-xl font-bold mb-4 text-center">🎙️📷 Voice & Video Chat</h1>
 
+        {/* ... باقي الكود بدون تغيير ... */}
         {!userId ? (
           <div className="flex gap-2 mb-4">
             <input
