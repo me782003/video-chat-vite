@@ -35,15 +35,18 @@ export default function App() {
               onClick={async () => {
                 toast.dismiss(t.id);
                 setCurrentCallTarget(from);
+
                 const stream = await setupMedia();
                 if (!stream) return;
 
                 const pc = createPeerConnection(stream, from);
+                setPeerConnection(pc);
+
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
+
                 socket.emit('answer-call', { targetId: from, answer });
-                setPeerConnection(pc);
               }}
             >قبول</button>
             <button className="px-3 py-1 bg-red-500 text-white rounded" onClick={() => toast.dismiss(t.id)}>رفض</button>
@@ -55,6 +58,16 @@ export default function App() {
     socket.on('call-answered', async ({ from, answer }) => {
       try {
         await peerConnection?.setRemoteDescription(new RTCSessionDescription(answer));
+
+        // Ensure media is setup after call accepted
+        if (!localStream) {
+          const stream = await setupMedia();
+          if (!stream) return;
+
+          const pc = createPeerConnection(stream, from);
+          setPeerConnection(pc);
+        }
+
         console.log('✅ تم الربط بالطرف الآخر!');
       } catch (err) {
         console.error('❌ فشل في setRemoteDescription:', err);
@@ -109,9 +122,6 @@ export default function App() {
 
     pc.ontrack = (event) => {
       const remoteStream = event.streams[0];
-      const hasVideo = remoteStream.getVideoTracks().length > 0;
-      console.log("🎥 Remote stream received. Video tracks:", hasVideo ? "✅ موجود" : "❌ غير موجود");
-
       setTimeout(() => {
         if (remoteVideoRef.current && remoteStream) {
           remoteVideoRef.current.srcObject = remoteStream;
@@ -125,10 +135,6 @@ export default function App() {
               .then(() => console.log("🎬 الفيديو اشتغل بنجاح"))
               .catch((err) => console.warn("🚫 فشل تشغيل الفيديو تلقائيًا:", err));
           }
-
-          console.log("✅ Remote stream attached to video element");
-        } else {
-          console.warn("⚠️ remoteVideoRef مش جاهز أو مفيش stream");
         }
       }, 300);
     };
@@ -139,6 +145,16 @@ export default function App() {
           targetId: currentCallTarget || targetId,
           candidate: event.candidate
         });
+      }
+    };
+
+    pc.onnegotiationneeded = async () => {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('call-user', { targetId: currentCallTarget || targetId, offer });
+      } catch (err) {
+        console.error("❌ Error during renegotiation:", err);
       }
     };
 
@@ -155,12 +171,14 @@ export default function App() {
   const handleCall = async (targetId) => {
     const stream = await setupMedia();
     if (!stream) return;
+
     setCurrentCallTarget(targetId);
     const pc = createPeerConnection(stream, targetId);
+    setPeerConnection(pc);
+
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socket.emit('call-user', { targetId, offer });
-    setPeerConnection(pc);
   };
 
   const endCall = () => {
