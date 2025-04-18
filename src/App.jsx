@@ -45,8 +45,12 @@ export default function App() {
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-
                 socket.emit('answer-call', { targetId: from, answer });
+
+                // Unmute remote video to allow audio
+                if (remoteVideoRef.current) {
+                  remoteVideoRef.current.muted = false;
+                }
               }}
             >قبول</button>
             <button className="px-3 py-1 bg-red-500 text-white rounded" onClick={() => toast.dismiss(t.id)}>رفض</button>
@@ -59,13 +63,17 @@ export default function App() {
       try {
         await peerConnection?.setRemoteDescription(new RTCSessionDescription(answer));
 
-        // Ensure media is setup after call accepted
+        // Ensure media is setup
         if (!localStream) {
           const stream = await setupMedia();
           if (!stream) return;
 
           const pc = createPeerConnection(stream, from);
           setPeerConnection(pc);
+        }
+
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.muted = false;
         }
 
         console.log('✅ تم الربط بالطرف الآخر!');
@@ -122,21 +130,12 @@ export default function App() {
 
     pc.ontrack = (event) => {
       const remoteStream = event.streams[0];
-      setTimeout(() => {
-        if (remoteVideoRef.current && remoteStream) {
-          remoteVideoRef.current.srcObject = remoteStream;
-          remoteVideoRef.current.autoplay = true;
-          remoteVideoRef.current.playsInline = true;
-          remoteVideoRef.current.muted = true;
-
-          const playPromise = remoteVideoRef.current.play();
-          if (playPromise !== undefined) {
-            playPromise
-              .then(() => console.log("🎬 الفيديو اشتغل بنجاح"))
-              .catch((err) => console.warn("🚫 فشل تشغيل الفيديو تلقائيًا:", err));
-          }
-        }
-      }, 300);
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.autoplay = true;
+        remoteVideoRef.current.playsInline = true;
+        remoteVideoRef.current.muted = false; // مهم لتشغيل الصوت
+      }
     };
 
     pc.onicecandidate = (event) => {
@@ -246,7 +245,7 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   <video ref={localVideoRef} className="w-full rounded" autoPlay muted playsInline />
-                  <video ref={remoteVideoRef} className="w-full rounded bg-black" autoPlay playsInline muted />
+                  <video ref={remoteVideoRef} className="w-full rounded bg-black" autoPlay playsInline />
                 </div>
                 <div className="border rounded p-2 mb-2 bg-gray-50 h-40 overflow-y-auto">
                   {messages.map((msg, idx) => (
@@ -285,6 +284,7 @@ export default function App() {
           </>
         )}
       </div>
+      <h1>Edit - 1</h1>
     </div>
   );
 }
