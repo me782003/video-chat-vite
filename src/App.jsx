@@ -32,14 +32,28 @@ export default function App() {
               className="px-3 py-1 bg-green-500 text-white rounded"
               onClick={async () => {
                 toast.dismiss(t.id);
+                setCurrentCallTarget(from);
+    
                 const stream = await setupMedia();
                 if (!stream) return;
-
-                const pc = new RTCPeerConnection({
-                  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-                });
-
-                // إعداد معالجات ICE للمستجيب
+    
+                const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    
+                // أضف الوسائط (الصوت والصورة) بتاعة الطرف التاني
+                stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+                setLocalStream(stream);
+                setPeerConnection(pc);
+    
+                // لما الطرف التاني يبعت فيديوه
+                pc.ontrack = (event) => {
+                  const remoteStream = event.streams[0];
+                  if (remoteVideoRef.current) {
+                    remoteVideoRef.current.srcObject = remoteStream;
+                    remoteVideoRef.current.muted = false;
+                  }
+                };
+    
+                // Send ICE
                 pc.onicecandidate = (event) => {
                   if (event.candidate) {
                     socket.emit("ice-candidate", {
@@ -48,24 +62,12 @@ export default function App() {
                     });
                   }
                 };
-
-                // معالجة تدفق الوسائط الواردة
-                pc.ontrack = (event) => {
-                  const remoteStream = event.streams[0];
-                  if (remoteVideoRef.current) {
-                    remoteVideoRef.current.srcObject = remoteStream;
-                  }
-                };
-
-                stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
+    
+                // التفاوض
                 await pc.setRemoteDescription(new RTCSessionDescription(offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
-
                 socket.emit("answer-call", { targetId: from, answer });
-                setCurrentCallTarget(from);
-                setPeerConnection(pc);
               }}
             >
               قبول
@@ -80,6 +82,7 @@ export default function App() {
         </div>
       ));
     });
+    
 
     socket.on("call-answered", async ({ from, answer }) => {
       if (peerConnection) {
@@ -138,25 +141,39 @@ export default function App() {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    // إعداد معالجات ICE للمتصل
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    pc.ontrack = (event) => {
+      const remoteStream = event.streams[0];
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.autoplay = true;
+        remoteVideoRef.current.playsInline = true;
+        remoteVideoRef.current.muted = false;
+      }
+    };
+
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit("ice-candidate", {
-          targetId,
+          targetId: currentCallTarget || targetId,
           candidate: event.candidate,
         });
       }
     };
 
-    // معالجة تدفق الوسائط الواردة
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = remoteStream;
+    pc.onnegotiationneeded = async () => {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("call-user", {
+          targetId: currentCallTarget || targetId,
+          offer,
+        });
+      } catch (err) {
+        console.error("❌ renegotiation error", err);
       }
     };
-
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     return pc;
   };
@@ -176,24 +193,14 @@ export default function App() {
     const pc = createPeerConnection(stream, targetId);
     setPeerConnection(pc);
 
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit("call-user", { targetId, offer });
-    } catch (err) {
-      console.error("❌ فشل في إنشاء العرض", err);
-    }
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit("call-user", { targetId, offer });
   };
 
   const endCall = () => {
-    if (peerConnection) {
-      peerConnection.ontrack = null;
-      peerConnection.onicecandidate = null;
-      peerConnection.close();
-    }
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-    }
+    peerConnection?.close();
+    localStream?.getTracks().forEach((t) => t.stop());
     setPeerConnection(null);
     setLocalStream(null);
     setCurrentCallTarget(null);
@@ -235,114 +242,7 @@ export default function App() {
       <div className="w-full max-w-md bg-white shadow-xl rounded-2xl p-4">
         <h1 className="text-xl font-bold mb-4 text-center">🎙️📷 Voice & Video Chat</h1>
 
-        {/* ... باقي الكود بدون تغيير ... */}
-        {!userId ? (
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              placeholder="اكتب اسمك أو معرفك"
-              className="flex-grow p-2 border rounded-lg"
-              onChange={(e) => setUserIdInput(e.target.value)}
-            />
-            <button
-              onClick={handleLogin}
-              className="bg-blue-500 text-white px-4 py-2 rounded-lg"
-            >
-              دخول
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="mb-4 text-center text-gray-700">
-              أهلاً، {userId} 👋
-            </div>
-
-            {peerConnection && (
-              <>
-                <div className="flex gap-2 mb-4">
-                  <button
-                    onClick={handleEndCall}
-                    className="bg-red-600 text-white px-4 py-2 rounded"
-                  >
-                    📴 إنهاء
-                  </button>
-                  <button
-                    onClick={toggleMute}
-                    className="bg-gray-700 text-white px-4 py-2 rounded"
-                  >
-                    {isMuted ? "🎙️ تشغيل المايك" : "🔇 كتم المايك"}
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <video
-                    ref={localVideoRef}
-                    className="w-full rounded"
-                    autoPlay
-                    muted
-                    playsInline
-                  />
-                  <video
-                    ref={remoteVideoRef}
-                    className="w-full rounded bg-black"
-                    autoPlay
-                    playsInline
-                  />
-                </div>
-                <div className="border rounded p-2 mb-2 bg-gray-50 h-40 overflow-y-auto">
-                  {messages.map((msg, idx) => (
-                    <div
-                      key={idx}
-                      className={msg.from === "me" ? "text-right" : "text-left"}
-                    >
-                      <span className="text-sm text-gray-800">
-                        {msg.from === "me" ? "أنا" : "الطرف الآخر"}:
-                      </span>{" "}
-                      {msg.message}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                    placeholder="اكتب رسالة..."
-                    className="flex-grow p-2 border rounded"
-                  />
-                  <button
-                    onClick={sendMessage}
-                    className="bg-blue-500 text-white px-3 rounded"
-                  >
-                    إرسال
-                  </button>
-                </div>
-              </>
-            )}
-
-            <div className="border p-2 rounded bg-gray-50 mt-4 max-h-60 overflow-y-auto">
-              <p className="font-semibold mb-2">🧑‍🤝‍🧑 المتصلين حاليًا:</p>
-              {connectedUsers.length === 0 ? (
-                <p className="text-sm text-gray-500">لا يوجد مستخدمين حاليًا.</p>
-              ) : (
-                connectedUsers.map(([id, name]) => (
-                  <div
-                    key={id}
-                    className="flex items-center justify-between mb-2"
-                  >
-                    <span className="text-sm break-all">{name}</span>
-                    <button
-                      onClick={() => handleCall(id)}
-                      className="bg-green-500 text-white px-2 py-1 rounded text-sm"
-                    >
-                      اتصل
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </>
-        )}
+     
       </div>
     </div>
   );
