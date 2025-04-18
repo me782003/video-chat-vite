@@ -18,9 +18,6 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
 
-  const localVideoRef = useRef(null);
-  const remoteVideoRef = useRef(null);
-
   useEffect(() => {
     socket.on("connect", () => setMyId(socket.id));
     socket.on("update-user-list", (users) => setConnectedUsers(users));
@@ -42,16 +39,6 @@ export default function App() {
                 const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-                pc.ontrack = (event) => {
-                  const remoteStream = event.streams[0];
-                  if (remoteVideoRef.current && remoteStream) {
-                    remoteVideoRef.current.srcObject = remoteStream;
-                    remoteVideoRef.current.autoplay = true;
-                    remoteVideoRef.current.playsInline = true;
-                    remoteVideoRef.current.muted = false;
-                  }
-                };
-
                 pc.onicecandidate = (event) => {
                   if (event.candidate) {
                     socket.emit('ice-candidate', { targetId: from, candidate: event.candidate });
@@ -64,9 +51,6 @@ export default function App() {
                 socket.emit('answer-call', { targetId: from, answer });
 
                 setLocalStream(stream);
-                if (localVideoRef.current) {
-                  localVideoRef.current.srcObject = stream;
-                }
                 setPeerConnection(pc);
               }}
             >قبول</button>
@@ -115,10 +99,10 @@ export default function App() {
 
   const setupMedia = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       return stream;
     } catch (err) {
-      toast.error("🎤 فشل في الوصول للمايك أو الكاميرا: " + err.message);
+      toast.error("🎤 فشل في الوصول للمايك: " + err.message);
       return null;
     }
   };
@@ -137,16 +121,6 @@ export default function App() {
     const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      if (remoteVideoRef.current && remoteStream) {
-        remoteVideoRef.current.srcObject = remoteStream;
-        remoteVideoRef.current.autoplay = true;
-        remoteVideoRef.current.playsInline = true;
-        remoteVideoRef.current.muted = false;
-      }
-    };
-
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit('ice-candidate', {
@@ -161,9 +135,6 @@ export default function App() {
     socket.emit('call-user', { targetId, offer });
 
     setLocalStream(stream);
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = stream;
-    }
     setPeerConnection(pc);
   };
 
@@ -206,7 +177,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
       <Toaster position="top-right" />
       <div className="w-full max-w-md bg-white shadow-xl rounded-2xl p-4">
-        <h1 className="text-xl font-bold mb-4 text-center">🎙️📷 Voice & Video Chat</h1>
+        <h1 className="text-xl font-bold mb-4 text-center">🎙️ Voice Chat</h1>
 
         {!userId ? (
           <div className="flex gap-2 mb-4">
@@ -229,10 +200,6 @@ export default function App() {
                   <button onClick={toggleMute} className="bg-gray-700 text-white px-4 py-2 rounded">
                     {isMuted ? '🎙️ تشغيل المايك' : '🔇 كتم المايك'}
                   </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <video ref={localVideoRef} className="w-full rounded" autoPlay muted playsInline />
-                  <video ref={remoteVideoRef} className="w-full rounded bg-black" autoPlay playsInline />
                 </div>
                 <div className="border rounded p-2 mb-2 bg-gray-50 h-40 overflow-y-auto">
                   {messages.map((msg, idx) => (
